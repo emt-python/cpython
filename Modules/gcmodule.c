@@ -279,11 +279,11 @@ get_gc_state(void)
 void _PyGC_InitState(GCState *gcstate)
 {
 
-#define INIT_HEAD(GEN)                              \
-    do                                              \
-    {                                               \
-        GEN.head._gc_next = (uintptr_t) & GEN.head; \
-        GEN.head._gc_prev = (uintptr_t) & GEN.head; \
+#define INIT_HEAD(GEN)                            \
+    do                                            \
+    {                                             \
+        GEN.head._gc_next = (uintptr_t)&GEN.head; \
+        GEN.head._gc_prev = (uintptr_t)&GEN.head; \
     } while (0)
 
     for (int i = 0; i < NUM_GENERATIONS; i++)
@@ -3267,17 +3267,17 @@ void update_recursive_visitor(PyObject *each_op, unsigned long *combined)
     traverse = Py_TYPE(each_op)->tp_traverse;
     if (!traverse)
         return;
-        // {
-        // unsigned int last_length = *combined & 0xFFFFFFFF;
-        // *combined &= 0xFFFFFFFF00000000; // reset the lower 2 bytes (lengths), this is needed
-        // *combined += ((uint64_t)1 << 32);
-        //     unsigned int extractedDepth = (*combined >> 32);
-        //     if (extractedDepth > DEPTH_THRESHOLD) //
-        //     {
-        //         // max_depth = extractedDepth;
-        //         return;
-        //     }
-        // }
+    // {
+    // unsigned int last_length = *combined & 0xFFFFFFFF;
+    // *combined &= 0xFFFFFFFF00000000; // reset the lower 2 bytes (lengths), this is needed
+    // *combined += ((uint64_t)1 << 32);
+    //     unsigned int extractedDepth = (*combined >> 32);
+    //     if (extractedDepth > DEPTH_THRESHOLD) //
+    //     {
+    //         // max_depth = extractedDepth;
+    //         return;
+    //     }
+    // }
 #ifdef EARLY_CUTOFF
     if (++cutoff_counter % 20 == 0)
     {
@@ -3575,7 +3575,7 @@ double align_obj_2_page_bd_revised(unsigned int start_idx, unsigned int end_idx)
         }
 
         clock_gettime(CLOCK_MONOTONIC, &start);
-        int ret = move_pages(0, old_num_op, pages_arr, NULL, status_arr, 0);
+        int ret = move_pages(0, old_num_op, pages_arr, NULL, status_arr, 0); // see where the pages are
         clock_gettime(CLOCK_MONOTONIC, &end);
         elapsed = end.tv_sec - start.tv_sec;
         elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
@@ -3601,7 +3601,7 @@ double align_obj_2_page_bd_revised(unsigned int start_idx, unsigned int end_idx)
             // short cur_op_hotness = all_temps[i].diffs[NUM_SLOTS - 1] & HOTNESS_MASK;
             short cur_op_hotness = get_mlr_hotness_C_per_obj(i);
             // insert_into_pages((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i]);
-            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i]);
+            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i], 0);
         }
         free(pages_arr);
         free(status_arr);
@@ -3613,7 +3613,7 @@ double align_obj_2_page_bd_revised(unsigned int start_idx, unsigned int end_idx)
             // short cur_op_hotness = all_temps[i].diffs[NUM_SLOTS - 1] & HOTNESS_MASK;
             short cur_op_hotness = get_mlr_hotness_C_per_obj(i);
             // insert_into_pages_only_exists((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness);
-            insert_into_bucket_only_exists((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness);
+            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, 0, 1);
         }
     }
     else if (reset_all_temps == 2)
@@ -3623,7 +3623,7 @@ double align_obj_2_page_bd_revised(unsigned int start_idx, unsigned int end_idx)
             // short cur_op_hotness = all_temps[i].diffs[NUM_SLOTS - 1] & HOTNESS_MASK;
             short cur_op_hotness = get_mlr_hotness_C_per_obj(i);
             // insert_into_pages_only_exists((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness);
-            insert_into_bucket_only_exists((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness);
+            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, 0, 1);
         }
         int new_op_num = old_num_op - prev_num_op;
         assert(new_op_num > 0);
@@ -3665,7 +3665,7 @@ double align_obj_2_page_bd_revised(unsigned int start_idx, unsigned int end_idx)
             // short cur_op_hotness = all_temps[i].diffs[NUM_SLOTS - 1] & HOTNESS_MASK;
             short cur_op_hotness = get_mlr_hotness_C_per_obj(i);
             // insert_into_pages((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i - prev_num_op]);
-            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i - prev_num_op]);
+            insert_into_bucket((uintptr_t)all_temps[i].op & PAGE_MASK, cur_op_hotness, (bool)status_arr[i - prev_num_op], 0);
         }
         free(pages_arr);
         free(status_arr);
@@ -3819,7 +3819,7 @@ void *parse_llc_miss_bw_routine(void *args)
             sscanf(bw_line, "%lf %lf", &dram_bw, &cxl_bw);
             if (sscanf(bw_line, "%lf %lf", &dram_bw, &cxl_bw) == 2)
             {
-                fprintf(stderr, "dram_bw = %.2lf, cxl_bw = %.2lf\n", dram_bw, cxl_bw);
+                // fprintf(stderr, "dram_bw = %.2lf, cxl_bw = %.2lf\n", dram_bw, cxl_bw);
             }
             else
             {
@@ -4010,47 +4010,47 @@ double try_trigger_migration_revised(unsigned int start_idx, unsigned int end_id
 
     short split = 0; // <= split: cold, > split, hot
     // get distribution of hotness, then test different split
-    if (global_hotness_thresh == 0)
-    {
-        if (global_bookkeep_args->doIO)
-        {
-            populate_hotness_vec(); // if you want to see distribution
-        }
-        split = 0;
-    }
-    else if (global_hotness_thresh == 1) // avg
-    {
-        clock_gettime(CLOCK_MONOTONIC, &start);
-        short avg = get_avg_hotness();
-        clock_gettime(CLOCK_MONOTONIC, &end);
-        elapsed = end.tv_sec - start.tv_sec;
-        elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
-        fprintf(stderr, "get avg time: %.3f, avg: %hd\n", elapsed, avg);
-        split = avg;
-    }
-    else if (global_hotness_thresh == 2) // median
-    {
-        populate_hotness_vec();
-        clock_gettime(CLOCK_MONOTONIC, &start);
-        short median = get_median_hotness();
-        clock_gettime(CLOCK_MONOTONIC, &end);
-        elapsed = end.tv_sec - start.tv_sec;
-        elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
-        fprintf(stderr, "get median time: %.3f, median: %hd\n", elapsed, median);
-        split = median;
-    }
-    else if (global_hotness_thresh == 3) // 2nd mode
-    {
+    // if (global_hotness_thresh == 0)
+    // {
+    //     if (global_bookkeep_args->doIO)
+    //     {
+    //         populate_hotness_vec(); // if you want to see distribution
+    //     }
+    //     split = 0;
+    // }
+    // else if (global_hotness_thresh == 1) // avg
+    // {
+    //     clock_gettime(CLOCK_MONOTONIC, &start);
+    //     short avg = get_avg_hotness();
+    //     clock_gettime(CLOCK_MONOTONIC, &end);
+    //     elapsed = end.tv_sec - start.tv_sec;
+    //     elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    //     fprintf(stderr, "get avg time: %.3f, avg: %hd\n", elapsed, avg);
+    //     split = avg;
+    // }
+    // else if (global_hotness_thresh == 2) // median
+    // {
+    //     populate_hotness_vec();
+    //     clock_gettime(CLOCK_MONOTONIC, &start);
+    //     short median = get_median_hotness();
+    //     clock_gettime(CLOCK_MONOTONIC, &end);
+    //     elapsed = end.tv_sec - start.tv_sec;
+    //     elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    //     fprintf(stderr, "get median time: %.3f, median: %hd\n", elapsed, median);
+    //     split = median;
+    // }
+    // else if (global_hotness_thresh == 3) // 2nd mode
+    // {
 
-        populate_hotness_vec();
-        clock_gettime(CLOCK_MONOTONIC, &start);
-        short mode = get_2nd_mode_hotness();
-        clock_gettime(CLOCK_MONOTONIC, &end);
-        elapsed = end.tv_sec - start.tv_sec;
-        elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
-        fprintf(stderr, "get mode time: %.3f, mode: %hd\n", elapsed, mode);
-        split = mode;
-    }
+    //     populate_hotness_vec();
+    //     clock_gettime(CLOCK_MONOTONIC, &start);
+    //     short mode = get_2nd_mode_hotness();
+    //     clock_gettime(CLOCK_MONOTONIC, &end);
+    //     elapsed = end.tv_sec - start.tv_sec;
+    //     elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    //     fprintf(stderr, "get mode time: %.3f, mode: %hd\n", elapsed, mode);
+    //     split = mode;
+    // }
 
     // unsigned int max_size = get_pages_size();
     unsigned int max_size = get_pages_bkt_size();
@@ -4359,6 +4359,11 @@ int trigger_bk()
 
 void *manual_trigger_scan(void *arg)
 {
+#if defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 0)
+    fprintf(stderr, "using accumulated hotness (AH)\n");
+#elif defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 1)
+    fprintf(stderr, "using median hotness (MH)\n");
+#endif
     pthread_t parse_llc_thread_id; // for adaptive lazy demo
     global_bookkeep_args = (BookkeepArgs *)arg;
     if (global_bookkeep_args->doIO)

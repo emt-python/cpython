@@ -31,7 +31,8 @@ extern unsigned int old_num_op;
 #include <array>
 #include <math.h>                                                                            // for log2 function
 static std::unordered_map<uintptr_t, std::pair<short, std::pair<bool, bool>>> page_bkt_pair; // <addr, <bkt_idx, <loc, lazy>>>
-static std::array<int, 11> bkt_page_num_pair = {};
+#define NUM_BUCKETS 11
+static std::array<int, NUM_BUCKETS> bkt_page_num_pair = {};
 static short hot_bkt_idx_position[2];
 
 // global_unordered_set
@@ -480,7 +481,69 @@ short get_bkt_idx(short hotness)
     return (short)log2(hotness);
 }
 
-extern "C" void insert_into_bucket(uintptr_t page_addr, short hotness, bool location)
+#if defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 1)
+// median
+#include <queue>
+#include <functional>
+
+class MedianTracker
+{
+private:
+    std::priority_queue<short, std::vector<short>, std::less<short>> lowers;     // max-heap
+    std::priority_queue<short, std::vector<short>, std::greater<short>> highers; // min-heap
+
+    void rebalanceHeaps()
+    {
+        if (lowers.size() > highers.size() + 1)
+        {
+            highers.push(lowers.top());
+            lowers.pop();
+        }
+        else if (highers.size() > lowers.size())
+        {
+            lowers.push(highers.top());
+            highers.pop();
+        }
+    }
+
+public:
+    MedianTracker() = default;
+
+    void insertValue(short value)
+    {
+        if (lowers.empty() || value < lowers.top())
+        {
+            lowers.push(value);
+        }
+        else
+        {
+            highers.push(value);
+        }
+        rebalanceHeaps();
+    }
+
+    short getMedian() const
+    {
+        if (lowers.empty() && highers.empty())
+        {
+            // No data; handle as you wish
+            return 0.0;
+        }
+
+        if (lowers.size() == highers.size())
+        {
+            // Even number of elements
+            return (lowers.top() + highers.top()) / 2.0;
+        }
+        // Odd number: lowers has one extra
+        return lowers.top();
+    }
+};
+static std::unordered_map<uintptr_t, MedianTracker> page_median_data;
+
+#endif
+
+extern "C" void insert_into_bucket(uintptr_t page_addr, short hotness, bool location, bool insert_if_exists)
 {
     // auto it = page_bkt_pair.find(page_addr);
     // if (it != page_bkt_pair.end())
@@ -502,30 +565,60 @@ extern "C" void insert_into_bucket(uintptr_t page_addr, short hotness, bool loca
     //     bkt_page_num_pair[bkt_idx]++; // newly inserted pages, shouldn't be double calculated, thus safe to inc num
     // }
     auto [it, inserted] = page_bkt_pair.emplace(page_addr, std::make_pair(hotness, std::make_pair(location, false)));
-    if (!inserted)
+    if (!inserted) // false => page already exists
     {
-        // The page already exists, so update hotness and bucket index
-        short bkt_idx_before = get_bkt_idx(it->second.first);
-        it->second.first += hotness;
-        short bkt_idx_after = get_bkt_idx(it->second.first);
+        short bkt_idx_before = -1;
+        short bkt_idx_after = -1;
 
+#if defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 0)
+        // --- Accumulated Hotness (AH) ---
+        bkt_idx_before = get_bkt_idx(it->second.first);
+        it->second.first += hotness; // Accumulate new hotness
+        bkt_idx_after = get_bkt_idx(it->second.first);
+
+#elif defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 1)
+        // --- Median Hotness ---
+        short old_median = page_median_data[page_addr].getMedian();
+        bkt_idx_before = get_bkt_idx(old_median);
+
+        // Insert the new hotness sample
+        page_median_data[page_addr].insertValue(hotness);
+
+        short new_median = page_median_data[page_addr].getMedian();
+        bkt_idx_after = get_bkt_idx(new_median);
+
+        // Optionally update the short in page_bkt_pair with the new median
+        // or something else. For example:
+        it->second.first = static_cast<short>(new_median);
+#endif
         if (bkt_idx_before != bkt_idx_after)
         {
-            if (!(bkt_idx_before == 0 && bkt_page_num_pair[bkt_idx_before] == 0))
+            if (bkt_idx_before >= 0 && bkt_idx_before < NUM_BUCKETS &&
+                bkt_page_num_pair[bkt_idx_before] > 0)
             {
-                bkt_page_num_pair[bkt_idx_before]--; // Only decrement if bkt_idx_before is valid
+                bkt_page_num_pair[bkt_idx_before]--;
             }
             bkt_page_num_pair[bkt_idx_after]++;
         }
     }
-    else
-    {
-        // Newly inserted page
-        short bkt_idx = get_bkt_idx(hotness);
+    else if (!insert_if_exists) // skip checking if insert_if_exists == true
+    {                           // true: Newly inserted page
+        short bkt_idx = 0;
+#if defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 0)
+        // --- Accumulated Hotness ---
+        bkt_idx = get_bkt_idx(hotness);
+#elif defined(PAGE_HOTNESS_DETER) && (PAGE_HOTNESS_DETER == 1)
+        // --- Median Hotness ---
+        auto &medianTracker = page_median_data[page_addr];
+        medianTracker.insertValue(hotness);
+        short median = medianTracker.getMedian();
+        bkt_idx = get_bkt_idx(median);
+#endif
         bkt_page_num_pair[bkt_idx]++;
     }
 }
 
+// not used
 extern "C" void insert_into_bucket_only_exists(uintptr_t page_addr, short hotness)
 {
     auto it = page_bkt_pair.find(page_addr);

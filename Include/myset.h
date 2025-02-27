@@ -55,7 +55,8 @@ extern "C"
 
     void reset_bkt_page_num_pair();
     short get_bkt_idx(short hotness);
-    void insert_into_bucket(uintptr_t page_addr, short hotness, bool location);
+    void insert_into_bucket(uintptr_t page_addr, short hotness, bool location, bool insert_if_exists);
+    // not used
     void insert_into_bucket_only_exists(uintptr_t page_addr, short hotness);
     // void populate_mig_pages_eager(void **demote_pages, void **promote_pages, int *demo_size, int *promo_size, int *free_dram_pages, int bkt_split);
     // void populate_mig_pages_lazy(void **demote_pages, void **promote_pages, int *demo_size, int *promo_size, int *free_dram_pages, int bkt_split);
