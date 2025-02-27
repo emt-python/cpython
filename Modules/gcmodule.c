@@ -4368,7 +4368,15 @@ void *manual_trigger_scan(void *arg)
     global_bookkeep_args = (BookkeepArgs *)arg;
     if (global_bookkeep_args->doIO)
     {
-        const char *filename = "/home/lyuze/workspace/py_track/page_hotness.txt";
+        char *home = getenv("HOME"); // Get the value of $HOME
+        if (home == NULL)
+        {
+            fprintf(stderr, "HOME environment variable not set.\n");
+            return NULL;
+        }
+        const char *suffix = "/workspace/py_track/page_hotness.txt";
+        char filename[1024];
+        snprintf(filename, sizeof(filename), "%s%s", home, suffix);
 
         // Check if the file exists
         if (access(filename, F_OK) == 0)
